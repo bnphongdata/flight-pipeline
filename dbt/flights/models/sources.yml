@@ -1,0 +1,202 @@
+# ==============================================================================
+# KHAI BÁO NGUỒN DỮ LIỆU VÀ KIỂM TRA CHẤT LƯỢNG (DBT SOURCES & TESTS)
+# ==============================================================================
+
+version: 2
+
+sources:
+  # ----------------------------------------------------------------------------
+  # Tầng Staging: Dữ liệu nạp thô từ các file CSV
+  # ----------------------------------------------------------------------------
+  - name: staging
+    description: "Schema Staging chứa dữ liệu tạm thời vừa nạp từ CSV"
+    database: dw_flights
+    tables:
+      - name: airlines
+        description: "Bảng tạm dữ liệu hãng hàng không"
+      - name: airports
+        description: "Bảng tạm dữ liệu sân bay"
+      - name: planes
+        description: "Bảng tạm dữ liệu máy bay"
+      - name: weather
+        description: "Bảng tạm dữ liệu thời tiết"
+      - name: flights
+        description: "Bảng tạm dữ liệu các chuyến bay"
+
+  # ----------------------------------------------------------------------------
+  # Tầng Raw Data: Dữ liệu đã được chuẩn hóa và kiểm tra ràng buộc toàn vẹn
+  # ----------------------------------------------------------------------------
+  - name: raw_data
+    description: "Schema Raw Data chứa dữ liệu chuẩn của Data Warehouse"
+    schema: raw_data
+    database: dw_flights
+    tables:
+      # Bảng danh mục hãng bay
+      - name: airlines
+        description: "Danh mục các hãng hàng không"
+        columns:
+          - name: carrier
+            description: "Mã định danh hãng bay (2 ký tự, khóa chính)"
+            tests:
+              - unique
+              - not_null
+          - name: name
+            description: "Tên đầy đủ của hãng hàng không"
+            tests:
+              - not_null
+
+      # Bảng danh mục sân bay
+      - name: airports
+        description: "Danh mục các sân bay"
+        columns:
+          - name: faa
+            description: "Mã sân bay theo chuẩn FAA (3 ký tự, khóa chính)"
+            tests:
+              - unique
+              - not_null
+          - name: name
+            description: "Tên sân bay"
+            tests:
+              - not_null
+          - name: latitude
+            description: "Vĩ độ"
+            tests:
+              - not_null
+          - name: longitude
+            description: "Kinh độ"
+            tests:
+              - not_null
+          - name: altitude
+            description: "Độ cao so với mực nước biển"
+            tests:
+              - not_null
+          - name: timezone
+            description: "Múi giờ (độ lệch)"
+            tests:
+              - not_null
+          - name: dst
+            description: "Quy chuẩn giờ mùa hè (Daylight Saving Time)"
+            tests:
+              - not_null
+          - name: timezone_name
+            description: "Tên định danh múi giờ (IANA Timezone)"
+            tests:
+              - not_null
+
+      # Bảng lịch sử các chuyến bay (Fact table)
+      - name: flights
+        description: "Thông tin chi tiết lịch sử từng chuyến bay"
+        columns:
+          - name: carrier
+            description: "Mã hãng bay vận hành"
+            tests:
+              - relationships:
+                  to: source('raw_data', 'airlines')
+                  field: carrier
+          - name: flight
+            description: "Số hiệu chuyến bay"
+            tests:
+              - not_null
+          - name: year
+            description: "Năm cất cánh"
+            tests:
+              - not_null
+          - name: month
+            description: "Tháng cất cánh"
+            tests:
+              - not_null
+          - name: day
+            description: "Ngày cất cánh"
+            tests:
+              - not_null
+          - name: hour
+            description: "Giờ cất cánh"
+            tests:
+              - not_null
+          - name: minute
+            description: "Phút cất cánh"
+            tests:
+              - not_null
+          - name: actual_dep_time
+            description: "Thời gian khởi hành thực tế"
+          - name: schedule_dep_time
+            description: "Thời gian khởi hành dự kiến"
+          - name: dep_delay
+            description: "Thời gian trễ khởi hành (phút)"
+          - name: actual_arr_time
+            description: "Thời gian hạ cánh thực tế"
+          - name: sched_arr_time
+            description: "Thời gian hạ cánh dự kiến"
+          - name: arr_delay
+            description: "Thời gian trễ hạ cánh (phút)"
+          - name: tailnum
+            description: "Số đuôi máy bay (số đăng bạ)"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('raw_data', 'planes')
+                  field: tailnum
+          - name: origin
+            description: "Mã sân bay xuất phát"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('raw_data', 'airports')
+                  field: faa
+          - name: dest
+            description: "Mã sân bay đến"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('raw_data', 'airports')
+                  field: faa
+          - name: air_time
+            description: "Thời gian bay thực tế trên không (phút)"
+            tests:
+              - not_null
+          - name: distance
+            description: "Khoảng cách đường bay (dặm)"
+            tests:
+              - not_null
+          - name: time_hour
+            description: "Mốc thời gian theo giờ"
+            tests:
+              - not_null
+
+      # Bảng danh mục máy bay
+      - name: planes
+        description: "Danh sách máy bay và thông số kỹ thuật"
+        columns:
+          - name: tailnum
+            description: "Số đuôi máy bay (khóa chính)"
+            tests:
+              - unique
+              - not_null
+          - name: year
+            description: "Năm sản xuất"
+          - name: type
+            description: "Loại phương tiện bay"
+            tests:
+              - not_null
+          - name: manufacturer
+            description: "Hãng sản xuất máy bay"
+            tests:
+              - not_null
+          - name: model
+            description: "Mã mẫu máy bay (Model)"
+            tests:
+              - not_null
+          - name: engines
+            description: "Số lượng động cơ"
+            tests:
+              - not_null
+          - name: seats
+            description: "Số lượng ghế hành khách"
+            tests:
+              - not_null
+          - name: speed
+            description: "Tốc độ bay hành trình"
+          - name: engine
+            description: "Loại động cơ"
+            tests:
+              - not_null

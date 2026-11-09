@@ -1,0 +1,30 @@
+# ==============================================================================
+# SCHEMA ĐỊNH NGHĨA VÀ KIỂM THỬ TẦNG CURATED (DATA MART)
+# ==============================================================================
+
+version: 2
+
+models:
+  - name: flights_summary
+    description: "Bảng tổng hợp số liệu chuyến bay theo từng hãng hàng không, năm và tháng; bao gồm tổng số chuyến bay và thời gian trễ trung bình."
+    columns:
+      - name: carrier
+        description: "Mã hãng hàng không (2 ký tự)"
+        tests:
+          - not_null
+      - name: year
+        description: "Năm thực hiện chuyến bay"
+        tests:
+          - not_null
+      - name: month
+        description: "Tháng thực hiện chuyến bay"
+        tests:
+          - not_null
+      - name: total_flights
+        description: "Tổng số lượng chuyến bay khai thác"
+        tests:
+          - not_null
+      - name: avg_dep_delay
+        description: "Thời gian trễ cất cánh trung bình (phút)"
+      - name: avg_arr_delay
+        description: "Thời gian trễ hạ cánh trung bình (phút)"

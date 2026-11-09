@@ -1,0 +1,32 @@
+# ==============================================================================
+# DANH SÁCH CÁC TỆP / THƯ MỤC BỊ BỎ QUA KHI COMMIT GIT
+# ==============================================================================
+
+# IDE và cấu hình trình soạn thảo
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python và bytecode
+**/__pycache__/
+*.py[cod]
+*$py.class
+**/venv/
+.env.local
+
+# Tệp hệ thống hệ điều hành
+**/.DS_Store
+Thumbs.db
+
+# Log và dữ liệu tạm thời
+airflow/logs/
+*.log
+dbt.log
+target/
+dbt_packages/
+dbt_modules/
+.user.yml
+
+# Thư mục dữ liệu volume docker cục bộ (nếu có sinh ra)
+airflow/postgres-db-volume/

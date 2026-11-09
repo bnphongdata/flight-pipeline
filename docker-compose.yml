@@ -1,0 +1,151 @@
+# ==============================================================================
+# HỆ THỐNG PIPELINE DỮ LIỆU AIRFLOW + DBT + POSTGRESQL (DOCKER COMPOSE)
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # DỊCH VỤ 1: Data Warehouse chính (PostgreSQL)
+  # Lưu trữ các tầng dữ liệu: staging, raw_data, và curated
+  # ----------------------------------------------------------------------------
+  flights_db:
+    image: postgres:15
+    container_name: flights_db
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      # Tự động thực thi script tạo schema và các bảng khi khởi chạy lần đầu
+      - ./postgres/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dbt_network
+  
+  # ----------------------------------------------------------------------------
+  # DỊCH VỤ 2: Khởi tạo môi trường Airflow (Airflow Init)
+  # Khởi tạo schema metadata của Airflow và tạo tài khoản quản trị Admin
+  # ----------------------------------------------------------------------------
+  airflow-init:
+    image: apache/airflow:2.9.1
+    container_name: airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db upgrade &&
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    depends_on:
+      - airflow-postgres
+    networks:
+      - dbt_network
+
+  # ----------------------------------------------------------------------------
+  # DỊCH VỤ 3: Giao diện người dùng Airflow (Airflow Webserver)
+  # Truy cập qua cổng: http://localhost:8080
+  # ----------------------------------------------------------------------------
+  airflow-webserver:
+    image: custom-airflow-dbt:2.9.1
+    build: airflow/
+    container_name: airflow-webserver
+    restart: always
+    depends_on:
+      - airflow-init
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      # Kết nối mặc định đến Data Warehouse PostgreSQL cho Airflow Hooks
+      AIRFLOW_CONN_POSTGRES: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      # Cấu hình thư mục làm việc của dbt
+      DBT_PROFILES_DIR: /opt/airflow/dbt
+      DBT_PROJECT_DIR: /opt/airflow/dbt/flights
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data
+      - ./dbt:/opt/airflow/dbt
+    networks:
+      - dbt_network
+    command: webserver
+
+  # ----------------------------------------------------------------------------
+  # DỊCH VỤ 4: Bộ điều phối và lập lịch Airflow (Airflow Scheduler)
+  # Chịu trách nhiệm quét DAGs và thực thi các tasks
+  # ----------------------------------------------------------------------------
+  airflow-scheduler:
+    image: custom-airflow-dbt:2.9.1
+    container_name: airflow-scheduler
+    build: airflow/
+    restart: always
+    depends_on:
+      - airflow-webserver
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW_CONN_POSTGRES: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      DBT_PROFILES_DIR: /opt/airflow/dbt
+      DBT_PROJECT_DIR: /opt/airflow/dbt/flights
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data
+      - ./dbt:/opt/airflow/dbt
+    networks:
+      - dbt_network
+    command: scheduler
+
+  # ----------------------------------------------------------------------------
+  # DỊCH VỤ 5: Cơ sở dữ liệu Metadata của Airflow (PostgreSQL)
+  # Lưu trữ trạng thái DAG runs, task instances, biến và kết nối của Airflow
+  # ----------------------------------------------------------------------------
+  airflow-postgres:
+    image: postgres:15
+    container_name: airflow-postgres
+    environment:
+      POSTGRES_USER: ${AIRFLOW_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${AIRFLOW_POSTGRES_DB}
+    volumes:
+      - ./airflow/postgres-db-volume:/var/lib/postgresql/data
+    networks:
+      - dbt_network
+
+# ------------------------------------------------------------------------------
+# Mạng kết nối nội bộ giữa các container
+# ------------------------------------------------------------------------------
+networks:
+  dbt_network:
+    driver: bridge

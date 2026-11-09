@@ -1,0 +1,28 @@
+# ==============================================================================
+# CẤU HÌNH KẾT NỐI CƠ SỞ DỮ LIỆU CHO DBT (DBT PROFILES)
+# ==============================================================================
+
+flights:
+  target: dev
+  outputs:
+    # Môi trường phát triển mặc định (Đích đến là schema raw_data)
+    dev:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST') }}"
+      user: "{{ env_var('POSTGRES_USER') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      port: 5432
+      dbname: dw_flights
+      schema: raw_data
+      threads: 4
+
+    # Môi trường báo cáo/phân tích (Đích đến là schema curated)
+    curated:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST') }}"
+      user: "{{ env_var('POSTGRES_USER') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      port: 5432
+      dbname: dw_flights
+      schema: curated
+      threads: 4
